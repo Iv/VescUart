@@ -101,6 +101,12 @@ class VescUart
 		 * @brief      Help Function to print struct dataPackage over Serial for Debug
 		 */
 		void printVescValues(void);
+		
+	    /**
+		 * @brief      Set the hand brake current to brake the motor
+		 * @param      brakeCurrent  - The current to apply
+		 */
+		void setHandBrakeCurrent(float brakeCurrent);
 
 	private: 
 

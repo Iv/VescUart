@@ -317,6 +317,16 @@ void VescUart::setDuty(float duty) {
 	packSendPayload(payload, 5);
 }
 
+void VescUart::setHandBrakeCurrent(float brakeCurrent) {
+	int32_t index = 0;
+	uint8_t payload[5];
+
+	payload[index++] = COMM_SET_HANDBRAKE;
+	buffer_append_int32(payload, (int32_t)(brakeCurrent * 1000), &index);
+
+	packSendPayload(payload, 5);
+}
+
 void VescUart::serialPrint(uint8_t * data, int len) {
 	if(debugPort != NULL){
 		for (int i = 0; i <= len; i++)
