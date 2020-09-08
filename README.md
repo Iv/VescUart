@@ -4,6 +4,12 @@ Arduino library for interfacing with a VESC over UART. This library is based upo
 
 **Important:** This is not a dropin replacement for RollingGeckos library. You will have to make some changes to your software, as all functions and values is now within a class, see below.
 
+## Note from FinallyFunctional
+
+This is a fork from [this repository](https://github.com/SolidGeek/VescUart). I noticed the author hasn't merged open pull requests for many months now so I'm just assuming the library isn't being maintained anymore.
+
+In this version I'm merging the development branch into master. I've also added a method to set the hand brake current for the motor.
+
 ## Usage
   
 Initialize VescUart class and select Serial port for UART communication.  
