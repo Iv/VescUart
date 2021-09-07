@@ -2,14 +2,42 @@
 #define _VESCUART_h
 
 #include <Arduino.h>
-#include "datatypes.h"
-#include "buffer.h"
-#include "crc.h"
+#include <datatypes.h>
+#include <buffer.h>
+#include <crc.h>
+
 
 class VescUart
 {
+
+	static const size_t max_message_length = 256;
+
+	typedef std::array<uint8_t, max_message_length> Message;
+	typedef std::function<void (Message message, size_t len)> MessageCallback;
+
+	static const uint32_t TIMEOUT_LIMIT = 100;
+
+	enum States {
+		IDLE,
+		RECEIVING,
+	};
+
+	int state = IDLE;
+	Message message_buf;
+	size_t message_len = 0;
+	size_t message_position = 0;
+
+	MessageCallback message_callback = NULL;
+
+	uint32_t timeout = 0;
+	void on_message(Message message, size_t len);
+
+	void process_char(uint8_t c);
+
+
 	/** Struct to store the telemetry data returned by the VESC */
 	struct dataPackage {
+		float tempMosfet;
 		float tempMotor;
 		float avgMotorCurrent;
 		float avgInputCurrent;
@@ -22,7 +50,6 @@ class VescUart
 		float wattHoursCharged;
 		long tachometer;
 		long tachometerAbs;
-		float tempMosfet;
 		uint8_t error; 
 		float pidPos;
 		uint8_t id; 
@@ -133,6 +160,8 @@ class VescUart
 		 * @return     The number of bytes receeived within the payload
 		 */
 		int receiveUartMessage(uint8_t * payloadReceived);
+
+		void receiveUartMessageAsync(MessageCallback callback);
 
 		/**
 		 * @brief      Verifies the message (CRC-16) and extracts the payload

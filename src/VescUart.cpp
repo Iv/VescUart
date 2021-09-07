@@ -33,7 +33,7 @@ int VescUart::receiveUartMessage(uint8_t * payloadReceived) {
 	uint8_t messageReceived[256];
 	uint16_t lenPayload = 0;
 	
-	uint32_t timeout = millis() + 100; // Defining the timestamp for timeout (100ms before timeout)
+	uint32_t timeout = millis() + TIMEOUT_LIMIT; // Defining the timestamp for timeout (100ms before timeout)
 
 	while ( millis() < timeout && messageRead == false) {
 
@@ -79,7 +79,7 @@ int VescUart::receiveUartMessage(uint8_t * payloadReceived) {
 			}
 		}
 	}
-	
+
 	if(messageRead == false && debugPort != NULL ) {
 		debugPort->println("Timeout");
 	}
@@ -99,6 +99,29 @@ int VescUart::receiveUartMessage(uint8_t * payloadReceived) {
 		return 0;
 	}
 }
+
+void VescUart::receiveUartMessageAsync(MessageCallback callback){
+	if(state == RECEIVING) {
+		Message message = message_buf;
+		message_callback(message, 0);
+		state = IDLE;
+	}
+
+	message_buf.fill(0);
+	message_position = 0;
+	timeout = millis() + TIMEOUT_LIMIT;
+	message_callback = callback;
+}
+
+void VescUart::process_char(uint8_t c) {
+	if(state = RECEIVING) {
+		if(message_position < max_message_length) {
+			message_buf[message_position] = c;
+			message_position++;
+		}
+	}
+}
+
 
 
 bool VescUart::unpackPayload(uint8_t * message, int lenMes, uint8_t * payload) {
