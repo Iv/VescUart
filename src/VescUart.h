@@ -15,7 +15,7 @@ class VescUart
 	typedef std::array<uint8_t, max_message_length> Message;
 	typedef std::function<void (Message message, size_t len)> MessageCallback;
 
-	static const uint32_t TIMEOUT_LIMIT = 100;
+	static const uint32_t TIMEOUT_LIMIT = 50;
 
 	enum States {
 		IDLE,
@@ -30,8 +30,8 @@ class VescUart
 	MessageCallback message_callback = NULL;
 
 	uint32_t timeout = 0;
-	void on_message(Message message, size_t len);
 
+	void on_message(Message message, size_t len);
 	void process_char(uint8_t c);
 
 
@@ -167,7 +167,7 @@ class VescUart
 		 * @brief      Verifies the message (CRC-16) and extracts the payload
 		 *
 		 * @param      message  - The received UART message
-		 * @param      lenMes   - The lenght of the message
+		 * @param      lenMes   - The length of the message
 		 * @param      payload  - The final payload ready to extract data from
 		 * @return     True if the process was a success
 		 */
