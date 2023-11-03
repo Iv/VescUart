@@ -9,50 +9,24 @@
 
 class VescUart
 {
-
-	static const size_t max_message_length = 256;
-
-	typedef std::array<uint8_t, max_message_length> Message;
-	typedef std::function<void (Message message, size_t len)> MessageCallback;
-
-	static const uint32_t TIMEOUT_LIMIT = 50;
-
-	enum States {
-		IDLE,
-		RECEIVING,
-	};
-
-	int state = IDLE;
-	Message message_buf;
-	size_t message_len = 0;
-	size_t message_position = 0;
-
-	MessageCallback message_callback = NULL;
-
-	uint32_t timeout = 0;
-
-	void on_message(Message message, size_t len);
-	void process_char(uint8_t c);
-
-
 	/** Struct to store the telemetry data returned by the VESC */
 	struct dataPackage {
-		float tempMosfet;
-		float tempMotor;
-		float avgMotorCurrent;
-		float avgInputCurrent;
-		float dutyCycleNow;
-		float rpm;
-		float inpVoltage;
-		float ampHours;
-		float ampHoursCharged;
-		float wattHours;
-		float wattHoursCharged;
-		long tachometer;
-		long tachometerAbs;
-		uint8_t error; 
-		float pidPos;
-		uint8_t id; 
+       float avgMotorCurrent;
+        float avgInputCurrent;
+        float dutyCycleNow;
+        float rpm;
+        float inpVoltage;
+        float ampHours;
+        float ampHoursCharged;
+        float wattHours;
+        float wattHoursCharged;
+        long tachometer;
+        long tachometerAbs;
+        float tempMosfet;
+        float tempMotor;
+        float pidPos;
+        uint8_t id;
+        mc_fault_code error; 
 	};
 
 	/** Struct to hold the nunchuck values to send over UART */
@@ -63,84 +37,162 @@ class VescUart
 		bool lowerButton; // valLowerButton
 	};
 
+    struct FWversionPackage {
+        uint8_t major;
+        uint8_t minor;
+    };
+
+	//Timeout - specifies how long the function will wait for the vesc to respond
+	const uint32_t _TIMEOUT;
 
 	public:
 		/**
 		 * @brief      Class constructor
 		 */
-		VescUart(void);
+		VescUart(uint32_t timeout_ms = 100);
 
-		/** Variable to hold measurements returned from VESC */
+		/** Variabel to hold measurements returned from VESC */
 		dataPackage data; 
 
-		/** Variable to hold nunchuck values */
+		/** Variabel to hold nunchuck values */
 		nunchuckPackage nunchuck; 
 
-		/**
-		 * @brief      Set the serial port for uart communication
-		 * @param      port  - Reference to Serial port (pointer) 
-		 */
-		void setSerialPort(Stream* port);
+       /** Variable to hold firmware version */
+        FWversionPackage fw_version; 
 
-		/**
-		 * @brief      Set the serial port for debugging
-		 * @param      port  - Reference to Serial port (pointer) 
-		 */
-		void setDebugPort(Stream* port);
+        /**
+         * @brief      Set the serial port for uart communication
+         * @param      port  - Reference to Serial port (pointer) 
+         */
+        void setSerialPort(Stream* port);
 
-		/**
-		 * @brief      Sends a command to VESC and stores the returned data
-		 *
-		 * @return     True if successfull otherwise false
-		 */
-		bool getVescValues(void);
+        /**
+         * @brief      Set the serial port for debugging
+         * @param      port  - Reference to Serial port (pointer) 
+         */
+        void setDebugPort(Stream* port);
 
-		/**
-		 * @brief      Sends values for joystick and buttons to the nunchuck app
-		 */
-		void setNunchuckValues(void);
+        /**
+         * @brief      Populate the firmware version variables
+         *
+         * @return     True if successfull otherwise false
+         */
+        bool getFWversion(void);
 
-		/**
-		 * @brief      Set the current to drive the motor
-		 * @param      current  - The current to apply
-		 */
-		void setCurrent(float current);
+        /**
+         * @brief      Populate the firmware version variables
+         *
+         * @param      canId  - The CAN ID of the VESC
+         * @return     True if successfull otherwise false
+         */
+        bool getFWversion(uint8_t canId);
 
-		/**
-		 * @brief      Set the current to brake the motor
-		 * @param      brakeCurrent  - The current to apply
-		 */
-		void setBrakeCurrent(float brakeCurrent);
+        /**
+         * @brief      Sends a command to VESC and stores the returned data
+         *
+         * @return     True if successfull otherwise false
+         */
+        bool getVescValues(void);
 
-		/**
-		 * @brief      Set the rpm of the motor
-		 * @param      rpm  - The desired RPM (actually eRPM = RPM * poles)
-		 */
-		void setRPM(float rpm);
+        /**
+         * @brief      Sends a command to VESC and stores the returned data
+         * @param      canId  - The CAN ID of the VESC
+         *
+         * @return     True if successfull otherwise false
+         */
+        bool getVescValues(uint8_t canId);
 
-		/**
-		 * @brief      Set the duty of the motor
-		 * @param      duty  - The desired duty (0.0-1.0)
-		 */
-		void setDuty(float duty);
+        /**
+         * @brief      Sends values for joystick and buttons to the nunchuck app
+         */
+        void setNunchuckValues(void);
+        /**
+         * @brief      Sends values for joystick and buttons to the nunchuck app
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void setNunchuckValues(uint8_t canId);
 
-		/**
-		 * @brief      Help Function to print struct dataPackage over Serial for Debug
-		 */
-		void printVescValues(void);
 		
 	    /**
 		 * @brief      Set the hand brake current to brake the motor
 		 * @param      brakeCurrent  - The current to apply
 		 */
 		void setHandBrakeCurrent(float brakeCurrent);
+        /**
+         * @brief      Set the current to drive the motor
+         * @param      current  - The current to apply
+         */
+        void setCurrent(float current);
+
+        /**
+         * @brief      Set the current to drive the motor
+         * @param      current  - The current to apply
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void setCurrent(float current, uint8_t canId);
+
+        /**
+         * @brief      Set the current to brake the motor
+         * @param      brakeCurrent  - The current to apply
+         */
+        void setBrakeCurrent(float brakeCurrent);
+
+        /**
+         * @brief      Set the current to brake the motor
+         * @param      brakeCurrent  - The current to apply
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void setBrakeCurrent(float brakeCurrent, uint8_t canId);
+
+
+        /**
+         * @brief      Set the rpm of the motor
+         * @param      rpm  - The desired RPM (actually eRPM = RPM * poles)
+         */
+        void setRPM(float rpm);		
+
+        /**
+         * @brief      Set the rpm of the motor
+         * @param      rpm  - The desired RPM (actually eRPM = RPM * poles)
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void setRPM(float rpm, uint8_t canId);
+
+        /**
+         * @brief      Set the duty of the motor
+         * @param      duty  - The desired duty (0.0-1.0)
+         */
+        void setDuty(float duty);
+
+        /**
+         * @brief      Set the duty of the motor
+         * @param      duty  - The desired duty (0.0-1.0)
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void setDuty(float duty, uint8_t canId);
+
+        /**
+         * @brief      Send a keepalive message
+         */
+        void sendKeepalive(void);
+
+        /**
+         * @brief      Send a keepalive message
+         * @param      canId  - The CAN ID of the VESC
+         */
+        void sendKeepalive(uint8_t canId);
+
+        /**
+         * @brief      Help Function to print struct dataPackage over Serial for Debug
+         */
+        void printVescValues(void);
 
 	private: 
 
-		/** Variable to hold the reference to the Serial object to use for UART */
+		/** Variabel to hold the reference to the Serial object to use for UART */
 		Stream* serialPort = NULL;
 
-		/** Variable to hold the reference to the Serial object to use for debugging. 
+		/** Variabel to hold the reference to the Serial object to use for debugging. 
 		  * Uses the class Stream instead of HarwareSerial */
 		Stream* debugPort = NULL;
 
@@ -160,8 +212,6 @@ class VescUart
 		 * @return     The number of bytes receeived within the payload
 		 */
 		int receiveUartMessage(uint8_t * payloadReceived);
-
-		void receiveUartMessageAsync(MessageCallback callback);
 
 		/**
 		 * @brief      Verifies the message (CRC-16) and extracts the payload
