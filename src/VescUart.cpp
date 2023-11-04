@@ -225,6 +225,7 @@ bool VescUart::processReadPacket(uint8_t * message) {
 
 		default:
 			return false;
+		break;
 	}
 }
 
@@ -283,6 +284,7 @@ bool VescUart::getVescValues(uint8_t canId) {
 	}
 	return false;
 }
+
 void VescUart::setNunchuckValues() {
 	return setNunchuckValues(0);
 }
