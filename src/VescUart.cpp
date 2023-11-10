@@ -194,6 +194,8 @@ bool VescUart::processReadPacket(uint8_t * message) {
 			fw_version.major = message[index++];
 			fw_version.minor = message[index++];
 			return true;
+		break;
+
 		case COMM_GET_VALUES: // Structure defined here: https://github.com/vedderb/bldc/blob/43c3bbaf91f5052a35b75c2ff17b5fe99fad94d1/commands.c#L164
 
 			data.tempMosfet 		= buffer_get_float16(message, 10.0, &index); 	// 2 bytes - mc_interface_temp_fet_filtered()
