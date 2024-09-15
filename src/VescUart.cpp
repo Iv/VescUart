@@ -30,12 +30,13 @@ int VescUart::receiveUartMessage(uint8_t * payloadReceived) {
 	uint16_t counter = 0;
 	uint16_t endMessage = 256;
 	bool messageRead = false;
+	bool packetSizeExceeded = false;
 	uint8_t messageReceived[256];
 	uint16_t lenPayload = 0;
 	
 	uint32_t timeout = millis() + _TIMEOUT; // Defining the timestamp for timeout (100ms before timeout)
 
-	while ( millis() < timeout && messageRead == false) {
+	while ( millis() < timeout && messageRead == false && packetSizeExceeded == false) {
 
 		while (serialPort->available()) {
 
@@ -66,6 +67,7 @@ int VescUart::receiveUartMessage(uint8_t * payloadReceived) {
 			}
 
 			if (counter >= sizeof(messageReceived)) {
+				packetSizeExceeded = true;
 				break;
 			}
 
