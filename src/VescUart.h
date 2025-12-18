@@ -57,8 +57,20 @@ class VescUart
 		/** Variabel to hold nunchuck values */
 		nunchuckPackage nunchuck; 
 
-       /** Variable to hold firmware version */
+       /** Variable to hold a firmware version */
         FWversionPackage fw_version; 
+
+		// Called when a complete UART message was received and CRC was OK.
+		using RxMessageCallback = void (*)(const uint8_t* payload, uint16_t payloadLen, void* user);
+		void setRxMessageCallback(RxMessageCallback cb, void* user = nullptr);
+
+		/**
+		 * @brief Non-blocking UART poll.
+		 * Call frequently (e.g. every loop()).
+		 * @return payload length (>0) when a full valid message was received, otherwise 0.
+		 */
+		int pollUart(uint8_t * payloadReceived);
+
 
         /**
          * @brief      Set the serial port for uart communication
@@ -71,6 +83,8 @@ class VescUart
          * @param      port  - Reference to Serial port (pointer) 
          */
         void setDebugPort(Stream* port);
+
+
 
         /**
          * @brief      Populate the firmware version variables
@@ -238,6 +252,48 @@ class VescUart
 		 * @param      len   - Lenght of the array to print
 		 */
 		void serialPrint(uint8_t * data, int len);
+
+		// ---- RX state machine (from earlier change) ----
+		enum class RxState : uint8_t {
+			FREE = 0,
+			RECEIVING_MESSAGE
+		};
+
+		RxState _rxState = RxState::FREE;
+
+		static constexpr uint16_t RX_BUF_SIZE = 256;
+		uint8_t  _rxBuf[RX_BUF_SIZE];
+		uint16_t _rxCount = 0;
+		uint16_t _rxEndMessage = 0;
+		uint16_t _rxLenPayload = 0;
+		uint32_t _rxLastByteMs = 0;
+
+		bool rxFeedByte(uint8_t b);
+		void rxReset();
+
+		// ---- User RX callback (still supported) ----
+		RxMessageCallback _userRxCb = nullptr;
+		void* _userRxCbUser = nullptr;
+
+		// ---- Request/response tracking for callback-driven get*() ----
+		enum class PendingRequest : uint8_t {
+			NONE = 0,
+			GET_VALUES,
+			GET_FW_VERSION
+		};
+
+		PendingRequest _pending = PendingRequest::NONE;
+		uint8_t _pendingCanId = 0;
+		uint32_t _pendingDeadlineMs = 0;
+		bool _pendingDone = false;
+		bool _pendingOk = false;
+
+		// Central handler called when a valid payload is received.
+		void handleRxPayload(const uint8_t* payload, uint16_t payloadLen);
+
+		// Helpers to understand replies (direct vs forwarded-can).
+		static bool extractPacketId(const uint8_t* payload, uint16_t payloadLen,
+								   uint8_t& outPacketId, const uint8_t*& outPacketStart);
 
 };
 

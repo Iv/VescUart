@@ -233,29 +233,146 @@ bool VescUart::processReadPacket(uint8_t * message) {
 	}
 }
 
-bool VescUart::getFWversion(void){
+void VescUart::setRxMessageCallback(RxMessageCallback cb, void* user) {
+	_userRxCb = cb;
+	_userRxCbUser = user;
+}
+
+bool VescUart::extractPacketId(const uint8_t* payload, uint16_t payloadLen,
+                               uint8_t& outPacketId, const uint8_t*& outPacketStart) {
+	if (payload == nullptr || payloadLen < 1) {
+		return false;
+	}
+
+	// Direct reply: [COMM_* ...]
+	if (payload[0] != (uint8_t)COMM_FORWARD_CAN) {
+		outPacketId = payload[0];
+		outPacketStart = payload;
+		return true;
+	}
+
+	// Forwarded-can reply: [COMM_FORWARD_CAN][canId][COMM_* ...]
+	if (payloadLen < 3) {
+		return false;
+	}
+
+	outPacketId = payload[2];
+	outPacketStart = payload + 2;
+	return true;
+}
+
+void VescUart::handleRxPayload(const uint8_t* payload, uint16_t payloadLen) {
+	// 1) First: resolve pending request if this message matches what we're waiting for.
+	uint8_t packetId = 0;
+	const uint8_t* packetStart = nullptr;
+
+	if (extractPacketId(payload, payloadLen, packetId, packetStart)) {
+		const bool matchesFw = (_pending == PendingRequest::GET_FW_VERSION) &&
+		                       (packetId == (uint8_t)COMM_FW_VERSION);
+		const bool matchesVals = (_pending == PendingRequest::GET_VALUES) &&
+		                         (packetId == (uint8_t)COMM_GET_VALUES);
+
+		if ((matchesFw || matchesVals) && !_pendingDone) {
+			// Parse into data/fw_version (processReadPacket expects payload starting with COMM_*).
+			_pendingOk = processReadPacket(const_cast<uint8_t*>(packetStart));
+			_pendingDone = true;
+		}
+	}
+
+	// 2) Then: forward to user callback (if any)
+	if (_userRxCb != nullptr) {
+		_userRxCb(payload, payloadLen, _userRxCbUser);
+	}
+}
+
+int VescUart::pollUart(uint8_t * payloadReceived) {
+	if (serialPort == NULL) {
+		return -1;
+	}
+
+	if (_rxState == RxState::RECEIVING_MESSAGE && _rxLastByteMs != 0) {
+		if ((millis() - _rxLastByteMs) > _TIMEOUT) {
+			if (debugPort != NULL) {
+				debugPort->println("RX inter-byte timeout, dropping partial frame");
+			}
+			rxReset();
+		}
+	}
+
+	while (serialPort->available() > 0) {
+		const uint8_t b = (uint8_t)serialPort->read();
+
+		if (rxFeedByte(b)) {
+			const uint16_t endMessage = _rxEndMessage;
+			const uint16_t lenPayload = _rxLenPayload;
+
+			const bool unpacked = unpackPayload(_rxBuf, endMessage, payloadReceived);
+
+			rxReset();
+
+			if (unpacked) {
+				// Internal dispatch: completes pending get*() and also calls user callback.
+				handleRxPayload(payloadReceived, lenPayload);
+				return (int)lenPayload;
+			}
+
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+
+bool VescUart::getFWversion(void) {
 	return getFWversion(0);
 }
 
-bool VescUart::getFWversion(uint8_t canId){
-	
-	int32_t index = 0;
-	int payloadSize = (canId == 0 ? 1 : 3);
-	uint8_t payload[payloadSize];
-	
-	if (canId != 0) {
-		payload[index++] = { COMM_FORWARD_CAN };
-		payload[index++] = canId;
-	}
-	payload[index++] = { COMM_FW_VERSION };
+bool VescUart::getFWversion(uint8_t canId) {
+	// Non-blocking state machine:
+	// - if idle: send request, arm timeout, return false
+	// - else: poll RX and return true when expected reply arrived & was parsed
 
-	packSendPayload(payload, payloadSize);
+	if (_pending == PendingRequest::NONE) {
+		int32_t index = 0;
+		const int payloadSize = (canId == 0 ? 1 : 3);
+		uint8_t payload[payloadSize];
 
-	uint8_t message[256];
-	int messageLength = receiveUartMessage(message);
-	if (messageLength > 0) { 
-		return processReadPacket(message); 
+		if (canId != 0) {
+			payload[index++] = COMM_FORWARD_CAN;
+			payload[index++] = canId;
+		}
+		payload[index++] = COMM_FW_VERSION;
+
+		_pending = PendingRequest::GET_FW_VERSION;
+		_pendingCanId = canId;
+		_pendingDeadlineMs = millis() + _TIMEOUT;
+		_pendingDone = false;
+		_pendingOk = false;
+
+		packSendPayload(payload, payloadSize);
+		return false;
 	}
+
+	// Only service if this call corresponds to the same request type & canId
+	if (_pending != PendingRequest::GET_FW_VERSION || _pendingCanId != canId) {
+		return false;
+	}
+
+	uint8_t rxPayload[256];
+	(void)pollUart(rxPayload);
+
+	if (_pendingDone) {
+		const bool ok = _pendingOk;
+		_pending = PendingRequest::NONE;
+		return ok;
+	}
+
+	if ((int32_t)(millis() - _pendingDeadlineMs) >= 0) {
+		_pending = PendingRequest::NONE;
+		return false;
+	}
+
 	return false;
 }
 
@@ -264,28 +381,49 @@ bool VescUart::getVescValues(void) {
 }
 
 bool VescUart::getVescValues(uint8_t canId) {
+	if (_pending == PendingRequest::NONE) {
+		if (debugPort != NULL) {
+			debugPort->println("Command: COMM_GET_VALUES " + String(canId));
+		}
 
-	if (debugPort!=NULL){
-		debugPort->println("Command: COMM_GET_VALUES "+String(canId));
+		int32_t index = 0;
+		const int payloadSize = (canId == 0 ? 1 : 3);
+		uint8_t payload[payloadSize];
+
+		if (canId != 0) {
+			payload[index++] = COMM_FORWARD_CAN;
+			payload[index++] = canId;
+		}
+		payload[index++] = COMM_GET_VALUES;
+
+		_pending = PendingRequest::GET_VALUES;
+		_pendingCanId = canId;
+		_pendingDeadlineMs = millis() + _TIMEOUT;
+		_pendingDone = false;
+		_pendingOk = false;
+
+		packSendPayload(payload, payloadSize);
+		return false;
 	}
 
-	int32_t index = 0;
-	int payloadSize = (canId == 0 ? 1 : 3);
-	uint8_t payload[payloadSize];
-	if (canId != 0) {
-		payload[index++] = { COMM_FORWARD_CAN };
-		payload[index++] = canId;
+	if (_pending != PendingRequest::GET_VALUES || _pendingCanId != canId) {
+		return false;
 	}
-	payload[index++] = { COMM_GET_VALUES };
 
-	packSendPayload(payload, payloadSize);
+	uint8_t rxPayload[256];
+	(void)pollUart(rxPayload);
 
-	uint8_t message[256];
-	int messageLength = receiveUartMessage(message);
-
-	if (messageLength > 55) {
-		return processReadPacket(message); 
+	if (_pendingDone) {
+		const bool ok = _pendingOk;
+		_pending = PendingRequest::NONE;
+		return ok;
 	}
+
+	if (static_cast<int32_t>(millis() - _pendingDeadlineMs) >= 0) {
+		_pending = PendingRequest::NONE;
+		return false;
+	}
+
 	return false;
 }
 
