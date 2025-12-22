@@ -49,7 +49,7 @@ class VescUart
 		/**
 		 * @brief      Class constructor
 		 */
-		VescUart(uint32_t timeout_ms = 100);
+		explicit VescUart(uint32_t timeout_ms = 100);
 
 		/** Variabel to hold measurements returned from VESC */
 		dataPackage data; 
