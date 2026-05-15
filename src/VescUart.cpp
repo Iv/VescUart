@@ -157,7 +157,7 @@ int VescUart::packSendPayload(uint8_t * payload, int lenPay) {
 	else
 	{
 		messageSend[count++] = 3;
-		messageSend[count++] = (uint8_t)(lenPay >> 8);
+		messageSend[count++] = static_cast<uint8_t>(lenPay >> 8);
 		messageSend[count++] = (uint8_t)(lenPay & 0xFF);
 	}
 
