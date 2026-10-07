@@ -103,6 +103,27 @@ class VescUart
         bool getVescValues(uint8_t canId);
 
         /**
+         * @brief      Non-blocking: sends COMM_GET_VALUES request, the answer is collected by poll()
+         * @param      canId  - The CAN ID of the VESC (0 - local)
+         */
+        void requestVescValues(uint8_t canId = 0);
+
+        /**
+         * @brief      Non-blocking: consumes available bytes through the receive state machine.
+         *             Returns as soon as one valid packet is processed.
+         *
+         * @return     COMM_PACKET_ID of the processed packet, or -1 if no complete packet yet
+         */
+        int poll(void);
+
+        /**
+         * @brief      Drops partially received packet (e.g. after a timeout)
+         */
+        void resetReceiver(void);
+
+        uint32_t getTimeout(void) const { return _TIMEOUT; }
+
+        /**
          * @brief      Sends values for joystick and buttons to the nunchuck app
          */
         void setNunchuckValues(void);
@@ -195,6 +216,22 @@ class VescUart
 		/** Variabel to hold the reference to the Serial object to use for debugging. 
 		  * Uses the class Stream instead of HarwareSerial */
 		Stream* debugPort = NULL;
+
+		/** Receive state machine used by poll() */
+		enum class RxState : uint8_t {
+			WAIT_START,
+			LENGTH,
+			PAYLOAD,
+			CRC_HIGH,
+			CRC_LOW,
+			END
+		};
+
+		RxState rxState = RxState::WAIT_START;
+		uint8_t rxPayload[256];
+		uint8_t rxLength = 0;
+		uint16_t rxIndex = 0;
+		uint16_t rxCrc = 0;
 
 		/**
 		 * @brief      Packs the payload and sends it over Serial

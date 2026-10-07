@@ -289,6 +289,83 @@ bool VescUart::getVescValues(uint8_t canId) {
 	return false;
 }
 
+void VescUart::requestVescValues(uint8_t canId) {
+	int32_t index = 0;
+	int payloadSize = (canId == 0 ? 1 : 3);
+	uint8_t payload[payloadSize];
+	if (canId != 0) {
+		payload[index++] = { COMM_FORWARD_CAN };
+		payload[index++] = canId;
+	}
+	payload[index++] = { COMM_GET_VALUES };
+
+	packSendPayload(payload, payloadSize);
+}
+
+void VescUart::resetReceiver(void) {
+	rxState = RxState::WAIT_START;
+	rxIndex = 0;
+}
+
+int VescUart::poll(void) {
+	if (serialPort == NULL)
+		return -1;
+
+	while (serialPort->available()) {
+		const uint8_t b = serialPort->read();
+
+		switch (rxState) {
+			case RxState::WAIT_START:
+				// Only short packets (start byte 2, payload <= 255) are supported
+				if (b == 2) rxState = RxState::LENGTH;
+				break;
+
+			case RxState::LENGTH:
+				if (b == 0) {
+					rxState = RxState::WAIT_START;
+				} else {
+					rxLength = b;
+					rxIndex = 0;
+					rxState = RxState::PAYLOAD;
+				}
+				break;
+
+			case RxState::PAYLOAD:
+				rxPayload[rxIndex++] = b;
+				if (rxIndex >= rxLength) rxState = RxState::CRC_HIGH;
+				break;
+
+			case RxState::CRC_HIGH:
+				rxCrc = static_cast<uint16_t>(b) << 8;
+				rxState = RxState::CRC_LOW;
+				break;
+
+			case RxState::CRC_LOW:
+				rxCrc |= b;
+				rxState = RxState::END;
+				break;
+
+			case RxState::END: {
+				rxState = RxState::WAIT_START;
+				if (b != 3 || crc16(rxPayload, rxLength) != rxCrc) {
+					if (debugPort != NULL) debugPort->println("Bad packet");
+					break;
+				}
+
+				const int packetId = rxPayload[0];
+				// Same length check as in the blocking getVescValues()
+				if (packetId == COMM_GET_VALUES && rxLength <= 55)
+					break;
+
+				if (processReadPacket(rxPayload))
+					return packetId;
+				break;
+			}
+		}
+	}
+	return -1;
+}
+
 void VescUart::setNunchuckValues() {
 	return setNunchuckValues(0);
 }
